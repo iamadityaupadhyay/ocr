@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
         {
           role: 'user',
           parts: [
-            { text: 'Extract all visible text from this image., translate to english only and give as it is formated ,give the output with 100% match' },
+            { text: 'Extract all visible text from this image., translate to english only and give as it is formated ,give the output with 100% match,dont write a single extra letter' },
             imagePart,
           ],
         },
