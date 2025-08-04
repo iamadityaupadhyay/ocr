@@ -50,23 +50,53 @@ export default function OCRUploader() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const processingSteps: ProcessingStep[] = [
     { text: "Analyzing image...", description: "Reading image data and validating format" },
     { text: "Preprocessing image...", description: "Optimizing image for text recognition" },
-    { text: "Extracting text...", description: "We deliver it in 1 mins also" },
+    { text: "Extracting text...", description: "Performing OCR processing" },
     { text: "Formatting results...", description: "Preparing extracted text in multiple formats" }
   ];
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const file: File | undefined = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      setError('No file selected. Please choose an image from your gallery or take a photo.');
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload a valid image file (e.g., JPG, PNG).');
+      return;
+    }
 
     const reader: FileReader = new FileReader();
     reader.onloadend = () => {
-      processImage(reader.result as string);
+      const result = reader.result as string;
+      if (result && result.startsWith('data:image/')) {
+        processImage(result);
+      } else {
+        setError('Failed to read the image file. Please try another file.');
+      }
+    };
+    reader.onerror = () => {
+      setError('Error reading the file. Please try again.');
     };
     reader.readAsDataURL(file);
+  };
+
+  const triggerGalleryInput = (): void => {
+    if (galleryInputRef.current) {
+      galleryInputRef.current.click();
+    }
+  };
+
+  const triggerCameraInput = (): void => {
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click();
+    }
   };
 
   const processImage = async (base64: string): Promise<void> => {
@@ -87,48 +117,60 @@ export default function OCRUploader() {
     setText('');
     setCurrentStep(0);
 
-    // Simulate processing steps
     for (let i = 0; i < processingSteps.length; i++) {
       setCurrentStep(i);
       await new Promise<void>(resolve => setTimeout(resolve, 1000));
     }
 
-    try {
-      const res: Response = await fetch('/apis/ocr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64Image: base64 }),
-      });
+    const maxRetries = 3;
+    let attempt = 0;
 
-      const data: OCRResponse = await res.json();
-      if (res.ok) {
-        setText(data.text || 'No text found');
-      } else {
-        setError(data.error || 'Something went wrong');
+    while (attempt < maxRetries) {
+      try {
+        const res: Response = await fetch('/apis/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Image: base64 }),
+          signal: AbortSignal.timeout(10000)
+        });
+
+        const data: OCRResponse = await res.json();
+
+        if (res.ok && data.text) {
+          setText(data.text);
+          break;
+        } else {
+          throw new Error(data.error || `OCR API failed with status ${res.status}`);
+        }
+      } catch (err: unknown) {
+        attempt++;
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        console.error(`Attempt ${attempt} failed:`, errorMessage);
+
+        if (attempt === maxRetries) {
+          setError(`Failed to extract text after ${maxRetries} attempts: ${errorMessage}`);
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
       }
-    } catch (err: unknown) {
-      console.error(err);
-      // For demo purposes, let's simulate some extracted text
-      setText('Sample extracted text from the OCR process.\nThis would be the actual text extracted from your image.\nMultiple lines are supported.\nNumbers: 123, 456, 789\nDates: 2024-01-15, March 10th, 2024');
-    } finally {
-      setLoading(false);
-      setShowModal(false);
-      setCurrentStep(0);
     }
+
+    setLoading(false);
+    setShowModal(false);
+    setCurrentStep(0);
   };
 
   const startCamera = async (): Promise<void> => {
     try {
-      // Check if getUserMedia is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setError('Camera not supported on this device/browser.');
         return;
       }
 
-      // Enhanced constraints for mobile devices
       const constraints: CameraConstraints = {
         video: {
-          facingMode: 'environment', // Use back camera on mobile
+          facingMode: 'environment',
           width: { ideal: 1280, max: 1920 },
           height: { ideal: 720, max: 1080 }
         }
@@ -139,21 +181,18 @@ export default function OCRUploader() {
       
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        // Add proper event handling for mobile
         videoRef.current.setAttribute('playsinline', 'true');
         videoRef.current.setAttribute('muted', 'true');
         await videoRef.current.play();
       }
       setIsCameraOpen(true);
-      setError(''); // Clear any previous errors
+      setError('');
     } catch (err: unknown) {
       console.error('Camera error:', err);
-      
-      // Provide specific error messages
       if (typeof err === 'object' && err !== null && 'name' in err) {
         const errorName = (err as { name: string }).name;
         if (errorName === 'NotAllowedError') {
-          setError('Camera access denied. Please allow camera permissions and try again.');
+          setError('Camera access denied. Please allow camera permissions in your device settings.');
         } else if (errorName === 'NotFoundError') {
           setError('No camera found on this device.');
         } else if (errorName === 'NotSupportedError') {
@@ -180,19 +219,16 @@ export default function OCRUploader() {
       return;
     }
 
-    // Set canvas dimensions to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
     const ctx: CanvasRenderingContext2D | null = canvas.getContext('2d');
     if (ctx) {
-      // Flip the image horizontally to match the mirrored video display
       ctx.save();
       ctx.scale(-1, 1);
       ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
       ctx.restore();
       
-      // Use higher quality for better OCR results
       const base64: string = canvas.toDataURL('image/jpeg', 0.9);
       
       if (base64 && base64.length > 50 && base64.startsWith('data:image/')) {
@@ -260,7 +296,6 @@ export default function OCRUploader() {
   };
 
   const downloadExcel = (): void => {
-    // Simple Excel-like format using CSV with .xlsx extension
     const data: string = getFormattedData();
     const blob: Blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url: string = URL.createObjectURL(blob);
@@ -280,6 +315,7 @@ export default function OCRUploader() {
       setTimeout(() => setCopied(false), 2000);
     } catch (err: unknown) {
       console.error('Failed to copy:', err);
+      setError('Failed to copy text to clipboard.');
     }
   };
 
@@ -292,29 +328,30 @@ export default function OCRUploader() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-800 mb-2">OCR Text Extractor</h1>
-          <p className="text-gray-600">Upload an image or capture with camera to extract text</p>
+          <p className="text-gray-600">Upload an image from gallery or take a photo to extract text</p>
         </div>
 
-        {/* Upload Section */}
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
-            <label className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg cursor-pointer transition-colors duration-200 w-full sm:w-auto justify-center">
+            <button
+              onClick={triggerGalleryInput}
+              className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg cursor-pointer transition-colors duration-200 w-full sm:w-auto justify-center"
+            >
               <Upload size={20} />
-              Upload Image
-              <input 
-                type="file" 
-                accept="image/*" 
-                capture="environment"
-                onChange={handleImageUpload} 
-                className="hidden"
-              />
-            </label>
+              Upload from Gallery
+            </button>
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
 
             <button
-              onClick={isCameraOpen ? capturePhoto : startCamera}
+              onClick={isCameraOpen ? capturePhoto : triggerCameraInput}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg text-white transition-colors duration-200 w-full sm:w-auto justify-center ${
                 isCameraOpen 
                   ? 'bg-green-500 hover:bg-green-600' 
@@ -322,8 +359,16 @@ export default function OCRUploader() {
               }`}
             >
               <Camera size={20} />
-              {isCameraOpen ? 'Capture Photo' : 'Use Camera'}
+              {isCameraOpen ? 'Capture Photo' : 'Take Photo'}
             </button>
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
 
             {isCameraOpen && (
               <button
@@ -336,16 +381,14 @@ export default function OCRUploader() {
             )}
           </div>
 
-          {/* Camera permission notice for mobile */}
           {!isCameraOpen && (
             <div className="mt-4 p-3 bg-blue-50 rounded-lg">
               <p className="text-sm text-blue-700 text-center">
-                📱 On mobile: Allow camera permissions when prompted for best experience
+                📱 On mobile: Tap "Upload from Gallery" to select an image from your device, or "Take Photo" to open the camera. Allow permissions when prompted.
               </p>
             </div>
           )}
 
-          {/* Camera View */}
           {isCameraOpen && (
             <div className="mt-6 text-center">
               <video 
@@ -354,10 +397,10 @@ export default function OCRUploader() {
                 autoPlay
                 playsInline
                 muted
-                style={{ transform: 'scaleX(-1)' }} // Mirror effect for better UX
+                style={{ transform: 'scaleX(-1)' }}
               />
               <p className="text-sm text-gray-500 mt-2">
-                Position your document in the camera view and tap capture
+                Position your document in the camera view and tap "Capture Photo"
               </p>
             </div>
           )}
@@ -365,7 +408,6 @@ export default function OCRUploader() {
           <canvas ref={canvasRef} className="hidden" />
         </div>
 
-        {/* Error Display */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-2 text-red-700">
@@ -375,7 +417,6 @@ export default function OCRUploader() {
           </div>
         )}
 
-        {/* Image Preview */}
         {image && (
           <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
             <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
@@ -389,7 +430,6 @@ export default function OCRUploader() {
           </div>
         )}
 
-        {/* Results Section */}
         {text && (
           <div className="bg-white rounded-xl shadow-lg p-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
@@ -397,7 +437,6 @@ export default function OCRUploader() {
                 📄 Extracted Text
               </h3>
               
-              {/* Export Buttons */}
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => downloadFile('txt')}
@@ -437,7 +476,6 @@ export default function OCRUploader() {
               </div>
             </div>
 
-            {/* Format Tabs */}
             <div className="flex flex-wrap gap-2 mb-4">
               {formatOptions.map((format: FormatOption) => (
                 <button
@@ -455,7 +493,6 @@ export default function OCRUploader() {
               ))}
             </div>
 
-            {/* Text Display */}
             <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-auto">
               <pre className="whitespace-pre-wrap text-sm text-gray-800 font-mono">
                 {getFormattedData()}
@@ -464,7 +501,6 @@ export default function OCRUploader() {
           </div>
         )}
 
-        {/* Processing Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-white bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4">
@@ -476,7 +512,6 @@ export default function OCRUploader() {
                 <p className="text-gray-600 text-sm">Please wait while we extract text from your image</p>
               </div>
 
-              {/* Progress Steps */}
               <div className="space-y-4">
                 {processingSteps.map((step: ProcessingStep, index: number) => (
                   <div 
