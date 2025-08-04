@@ -54,7 +54,7 @@ export default function OCRUploader() {
   const processingSteps: ProcessingStep[] = [
     { text: "Analyzing image...", description: "Reading image data and validating format" },
     { text: "Preprocessing image...", description: "Optimizing image for text recognition" },
-    { text: "Extracting text...", description: "Running OCR analysis on the image" },
+    { text: "Extracting text...", description: "We deliver it in 1 mins also" },
     { text: "Formatting results...", description: "Preparing extracted text in multiple formats" }
   ];
 
