@@ -37,7 +37,7 @@ interface CameraConstraints {
   };
 }
 
-export default function OCRUploader(): JSX.Element {
+export default function OCRUploader() {
   const [text, setText] = useState<string>('');
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
