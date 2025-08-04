@@ -113,14 +113,19 @@ export default function OCRUploader() {
       console.error('Camera error:', err);
       
       // Provide specific error messages
-      if (err.name === 'NotAllowedError') {
-        setError('Camera access denied. Please allow camera permissions and try again.');
-      } else if (err.name === 'NotFoundError') {
-        setError('No camera found on this device.');
-      } else if (err.name === 'NotSupportedError') {
-        setError('Camera not supported on this browser.');
-      } else if (err.name === 'NotReadableError') {
-        setError('Camera is being used by another application.');
+      if (typeof err === 'object' && err !== null && 'name' in err) {
+        const errorName = (err as { name: string }).name;
+        if (errorName === 'NotAllowedError') {
+          setError('Camera access denied. Please allow camera permissions and try again.');
+        } else if (errorName === 'NotFoundError') {
+          setError('No camera found on this device.');
+        } else if (errorName === 'NotSupportedError') {
+          setError('Camera not supported on this browser.');
+        } else if (errorName === 'NotReadableError') {
+          setError('Camera is being used by another application.');
+        } else {
+          setError('Failed to access camera. Please check permissions and try again.');
+        }
       } else {
         setError('Failed to access camera. Please check permissions and try again.');
       }
