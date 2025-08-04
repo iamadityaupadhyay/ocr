@@ -2,37 +2,74 @@
 import { useRef, useState } from 'react';
 import { Camera, Upload, Download, X, FileText, Table, Code, Copy, Check } from 'lucide-react';
 
+// Type definitions
+interface ProcessingStep {
+  text: string;
+  description: string;
+}
+
+interface OCRResponse {
+  text?: string;
+  error?: string;
+}
+
+interface JSONData {
+  extractedText: string;
+  lines: string[];
+  wordCount: number;
+  characterCount: number;
+  extractedAt: string;
+}
+
+type FormatType = 'text' | 'json' | 'csv';
+
+interface FormatOption {
+  key: FormatType;
+  label: string;
+  icon: string;
+}
+
+interface CameraConstraints {
+  video: {
+    facingMode: string;
+    width: { ideal: number; max: number };
+    height: { ideal: number; max: number };
+  };
+}
+
 export default function OCRUploader() {
-  const [text, setText] = useState('');
+  const [text, setText] = useState<string>('');
   const [image, setImage] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [currentStep, setCurrentStep] = useState(0);
-  const [showModal, setShowModal] = useState(false);
-  const [activeFormat, setActiveFormat] = useState('text');
-  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
+  const [currentStep, setCurrentStep] = useState<number>(0);
+  const [showModal, setShowModal] = useState<boolean>(false);
+  const [activeFormat, setActiveFormat] = useState<FormatType>('text');
+  const [copied, setCopied] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState<boolean>(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
 
-  const processingSteps = [
+  const processingSteps: ProcessingStep[] = [
     { text: "Analyzing image...", description: "Reading image data and validating format" },
     { text: "Preprocessing image...", description: "Optimizing image for text recognition" },
     { text: "Extracting text...", description: "Running OCR analysis on the image" },
     { text: "Formatting results...", description: "Preparing extracted text in multiple formats" }
   ];
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const file: File | undefined = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => processImage(reader.result as string);
+    const reader: FileReader = new FileReader();
+    reader.onloadend = () => {
+      processImage(reader.result as string);
+    };
     reader.readAsDataURL(file);
   };
 
-  const processImage = async (base64: string) => {
+  const processImage = async (base64: string): Promise<void> => {
     if (!base64 || base64.length < 50) {
       setError('Invalid image data');
       return;
@@ -53,23 +90,23 @@ export default function OCRUploader() {
     // Simulate processing steps
     for (let i = 0; i < processingSteps.length; i++) {
       setCurrentStep(i);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise<void>(resolve => setTimeout(resolve, 1000));
     }
 
     try {
-      const res = await fetch('/apis/ocr', {
+      const res: Response = await fetch('/apis/ocr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64Image: base64 }),
       });
 
-      const data = await res.json();
+      const data: OCRResponse = await res.json();
       if (res.ok) {
         setText(data.text || 'No text found');
       } else {
         setError(data.error || 'Something went wrong');
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
       // For demo purposes, let's simulate some extracted text
       setText('Sample extracted text from the OCR process.\nThis would be the actual text extracted from your image.\nMultiple lines are supported.\nNumbers: 123, 456, 789\nDates: 2024-01-15, March 10th, 2024');
@@ -80,7 +117,7 @@ export default function OCRUploader() {
     }
   };
 
-  const startCamera = async () => {
+  const startCamera = async (): Promise<void> => {
     try {
       // Check if getUserMedia is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -89,7 +126,7 @@ export default function OCRUploader() {
       }
 
       // Enhanced constraints for mobile devices
-      const constraints = {
+      const constraints: CameraConstraints = {
         video: {
           facingMode: 'environment', // Use back camera on mobile
           width: { ideal: 1280, max: 1920 },
@@ -97,7 +134,7 @@ export default function OCRUploader() {
         }
       };
 
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const mediaStream: MediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(mediaStream);
       
       if (videoRef.current) {
@@ -109,7 +146,7 @@ export default function OCRUploader() {
       }
       setIsCameraOpen(true);
       setError(''); // Clear any previous errors
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Camera error:', err);
       
       // Provide specific error messages
@@ -132,11 +169,11 @@ export default function OCRUploader() {
     }
   };
 
-  const capturePhoto = () => {
+  const capturePhoto = (): void => {
     if (!videoRef.current || !canvasRef.current) return;
 
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
+    const video: HTMLVideoElement = videoRef.current;
+    const canvas: HTMLCanvasElement = canvasRef.current;
     
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       setError('Camera not ready. Please wait and try again.');
@@ -147,7 +184,7 @@ export default function OCRUploader() {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    const ctx = canvas.getContext('2d');
+    const ctx: CanvasRenderingContext2D | null = canvas.getContext('2d');
     if (ctx) {
       // Flip the image horizontally to match the mirrored video display
       ctx.save();
@@ -156,7 +193,7 @@ export default function OCRUploader() {
       ctx.restore();
       
       // Use higher quality for better OCR results
-      const base64 = canvas.toDataURL('image/jpeg', 0.9);
+      const base64: string = canvas.toDataURL('image/jpeg', 0.9);
       
       if (base64 && base64.length > 50 && base64.startsWith('data:image/')) {
         stopCamera();
@@ -167,22 +204,22 @@ export default function OCRUploader() {
     }
   };
 
-  const stopCamera = () => {
+  const stopCamera = (): void => {
     if (videoRef.current) videoRef.current.pause();
     if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
+      stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       setStream(null);
     }
     setIsCameraOpen(false);
   };
 
-  const getFormattedData = () => {
+  const getFormattedData = (): string => {
     if (!text) return '';
     
     switch (activeFormat) {
       case 'json':
-        const lines = text.split('\n').filter(line => line.trim());
-        const jsonData = {
+        const lines: string[] = text.split('\n').filter((line: string) => line.trim());
+        const jsonData: JSONData = {
           extractedText: text,
           lines: lines,
           wordCount: text.split(/\s+/).length,
@@ -192,9 +229,9 @@ export default function OCRUploader() {
         return JSON.stringify(jsonData, null, 2);
       
       case 'csv':
-        const csvLines = text.split('\n').filter(line => line.trim());
-        let csv = 'Line Number,Content\n';
-        csvLines.forEach((line, index) => {
+        const csvLines: string[] = text.split('\n').filter((line: string) => line.trim());
+        let csv: string = 'Line Number,Content\n';
+        csvLines.forEach((line: string, index: number) => {
           csv += `${index + 1},"${line.replace(/"/g, '""')}"\n`;
         });
         return csv;
@@ -205,15 +242,15 @@ export default function OCRUploader() {
     }
   };
 
-  const downloadFile = (format: string) => {
-    const data = getFormattedData();
-    const blob = new Blob([data], { 
+  const downloadFile = (format: string): void => {
+    const data: string = getFormattedData();
+    const blob: Blob = new Blob([data], { 
       type: format === 'json' ? 'application/json' : 
            format === 'csv' ? 'text/csv' : 'text/plain' 
     });
     
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const url: string = URL.createObjectURL(blob);
+    const a: HTMLAnchorElement = document.createElement('a');
     a.href = url;
     a.download = `ocr-result.${format}`;
     document.body.appendChild(a);
@@ -222,12 +259,12 @@ export default function OCRUploader() {
     URL.revokeObjectURL(url);
   };
 
-  const downloadExcel = () => {
+  const downloadExcel = (): void => {
     // Simple Excel-like format using CSV with .xlsx extension
-    const data = getFormattedData();
-    const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const data: string = getFormattedData();
+    const blob: Blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url: string = URL.createObjectURL(blob);
+    const a: HTMLAnchorElement = document.createElement('a');
     a.href = url;
     a.download = 'ocr-result.xlsx';
     document.body.appendChild(a);
@@ -236,15 +273,21 @@ export default function OCRUploader() {
     URL.revokeObjectURL(url);
   };
 
-  const copyToClipboard = async () => {
+  const copyToClipboard = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(getFormattedData());
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Failed to copy:', err);
     }
   };
+
+  const formatOptions: FormatOption[] = [
+    { key: 'text', label: 'Plain Text', icon: '📝' },
+    { key: 'json', label: 'JSON', icon: '🔧' },
+    { key: 'csv', label: 'CSV', icon: '📊' }
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
@@ -270,7 +313,27 @@ export default function OCRUploader() {
               />
             </label>
 
-            
+            <button
+              onClick={isCameraOpen ? capturePhoto : startCamera}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg text-white transition-colors duration-200 w-full sm:w-auto justify-center ${
+                isCameraOpen 
+                  ? 'bg-green-500 hover:bg-green-600' 
+                  : 'bg-purple-500 hover:bg-purple-600'
+              }`}
+            >
+              <Camera size={20} />
+              {isCameraOpen ? 'Capture Photo' : 'Use Camera'}
+            </button>
+
+            {isCameraOpen && (
+              <button
+                onClick={stopCamera}
+                className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg transition-colors duration-200 w-full sm:w-auto justify-center"
+              >
+                <X size={20} />
+                Stop Camera
+              </button>
+            )}
           </div>
 
           {/* Camera permission notice for mobile */}
@@ -376,11 +439,7 @@ export default function OCRUploader() {
 
             {/* Format Tabs */}
             <div className="flex flex-wrap gap-2 mb-4">
-              {[
-                { key: 'text', label: 'Plain Text', icon: '📝' },
-                { key: 'json', label: 'JSON', icon: '🔧' },
-                { key: 'csv', label: 'CSV', icon: '📊' }
-              ].map(format => (
+              {formatOptions.map((format: FormatOption) => (
                 <button
                   key={format.key}
                   onClick={() => setActiveFormat(format.key)}
@@ -407,7 +466,7 @@ export default function OCRUploader() {
 
         {/* Processing Modal */}
         {showModal && (
-          <div className="fixed inset-0 bg-white bg-opacity-50 flex items-center justify-center z-50 ">
+          <div className="fixed inset-0 bg-white bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-xl p-8 max-w-md w-full mx-4">
               <div className="text-center mb-6">
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -419,7 +478,7 @@ export default function OCRUploader() {
 
               {/* Progress Steps */}
               <div className="space-y-4">
-                {processingSteps.map((step, index) => (
+                {processingSteps.map((step: ProcessingStep, index: number) => (
                   <div 
                     key={index}
                     className={`flex items-center gap-3 p-3 rounded-lg transition-all duration-300 ${
