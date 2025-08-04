@@ -33,7 +33,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Determine the MIME type from the data URL
+
     const mimeTypeMatch = base64Image.match(/^data:(image\/[^;]+);base64,/);
+    // weare sending image/jpeg as default if no MIME type is foundq
+
     const mimeType = mimeTypeMatch ? mimeTypeMatch[1] : 'image/jpeg';
 
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
         {
           role: 'user',
           parts: [
-            { text: 'Extract all visible text from this image., translate to english only and give as it is formated, check how much quantity of the items are there . dont write here is the or whatever, no any extra text please' },
+            { text: 'Extract all visible text from this image., translate to english only and give as it is formated ,give the output with 100% match' },
             imagePart,
           ],
         },
